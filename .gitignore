@@ -5,3 +5,6 @@
 /plugins
 bci-git-key-dags.pem
 bci-git-key.pem
+.DS_Store
+.idea
+
