@@ -1,1 +1,7 @@
 .env
+/config
+/dags
+/logs
+/plugins
+bci-git-key-dags.pem
+bci-git-key.pem

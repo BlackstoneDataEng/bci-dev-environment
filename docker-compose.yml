@@ -4,7 +4,11 @@ x-airflow-common:
   # Comment the image line, place your Dockerfile in the directory where you placed the docker-compose.yaml
   # and uncomment the "build" line below, Then run `docker-compose build` to build the images.
   # image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:3.0.3}
-  build: .
+  build:
+    context: .
+    dockerfile: Dockerfile
+    args:
+      - CACHE_BUST=${CACHE_BUST:-$(date +%s)}
   environment:
     &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
@@ -29,7 +33,7 @@ x-airflow-common:
     
     # Java Environment Variables
     JAVA_HOME: /usr/lib/jvm/default-java/
-    PATH: $PATH:/usr/lib/jvm/default-java/bin
+    PATH: /home/airflow/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/lib/jvm/default-java/bin
     
     # Git Repository URLs for automatic cloning
     DAGS_REPO_URL: ${DAGS_REPO_URL:-}
@@ -47,10 +51,8 @@ x-airflow-common:
     DEBUG: ${DEBUG:-true}
     LOCAL_DATA_PATH: ${LOCAL_DATA_PATH:-/opt/airflow/data}
   volumes:
-    - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
     - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
     - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
-    - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
     - ${AIRFLOW_PROJ_DIR:-.}/data:/opt/airflow/data
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
@@ -285,28 +287,6 @@ services:
       - airflow
     depends_on:
       <<: *airflow-common-depends-on
-
-  # You can enable flower by adding "--profile flower" option e.g. docker-compose --profile flower up
-  # or by explicitly targeted on the command line e.g. docker-compose up flower.
-  # See: https://docs.docker.com/compose/profiles/
-  flower:
-    <<: *airflow-common
-    command: celery flower
-    profiles:
-      - flower
-    ports:
-      - "5555:5555"
-    healthcheck:
-      test: [ "CMD", "curl", "--fail", "http://localhost:5555/" ]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    restart: always
-    depends_on:
-      <<: *airflow-common-depends-on
-      airflow-init:
-        condition: service_completed_successfully
 
   azurite:
     image: mcr.microsoft.com/azure-storage/azurite
