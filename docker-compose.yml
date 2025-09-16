@@ -9,6 +9,9 @@ x-airflow-common:
     dockerfile: Dockerfile
     args:
       - CACHE_BUST=${CACHE_BUST:-$(date +%s)}
+      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID}
+      - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET}
+      - AZURE_TENANT_ID=${AZURE_TENANT_ID}
   environment:
     &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
@@ -38,6 +41,11 @@ x-airflow-common:
     # Git Repository URLs for automatic cloning
     DAGS_REPO_URL: ${DAGS_REPO_URL:-}
     PLUGINS_REPO_URL: ${PLUGINS_REPO_URL:-}
+    
+    # Azure Service Principal for Key Vault access
+    AZURE_CLIENT_ID: ${AZURE_CLIENT_ID}
+    AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET}
+    AZURE_TENANT_ID: ${AZURE_TENANT_ID}
     
     # Custom Application Settings
     POSTGRES_HOST: postgres
