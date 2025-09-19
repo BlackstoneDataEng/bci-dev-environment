@@ -4,14 +4,7 @@ x-airflow-common:
   # Comment the image line, place your Dockerfile in the directory where you placed the docker-compose.yaml
   # and uncomment the "build" line below, Then run `docker-compose build` to build the images.
   # image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:3.0.3}
-  build:
-    context: .
-    dockerfile: Dockerfile
-    args:
-      - CACHE_BUST=${CACHE_BUST:-$(date +%s)}
-      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID}
-      - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET}
-      - AZURE_TENANT_ID=${AZURE_TENANT_ID}
+  build: .
   environment:
     &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
@@ -21,7 +14,7 @@ x-airflow-common:
     AIRFLOW__CELERY__BROKER_URL: redis://:@redis:6379/0
     AIRFLOW__CORE__FERNET_KEY: ''
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
-    AIRFLOW__CORE__LOAD_EXAMPLES: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     AIRFLOW__CORE__EXECUTION_API_SERVER_URL: 'http://airflow-apiserver:8080/execution/'
     # yamllint disable rule:line-length
     # Use simple http server on scheduler for health checks
@@ -36,20 +29,11 @@ x-airflow-common:
     
     # Java Environment Variables
     JAVA_HOME: /usr/lib/jvm/default-java/
-    PATH: /home/airflow/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/lib/jvm/default-java/bin
+    PATH: $PATH:/usr/lib/jvm/default-java/bin
     
     # Git Repository URLs for automatic cloning
     DAGS_REPO_URL: ${DAGS_REPO_URL:-}
     PLUGINS_REPO_URL: ${PLUGINS_REPO_URL:-}
-    
-    # Azure Service Principal
-    AZURE_CLIENT_ID: ${AZURE_CLIENT_ID}
-    AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET}
-    AZURE_TENANT_ID: ${AZURE_TENANT_ID}
-
-    # TrackTik Account Information
-    TRACKTIK_CLIENT_ID: ${TRACKTIK_CLIENT_ID}
-    TRACKTIK_CLIENT_SECRET: ${TRACKTIK_CLIENT_SECRET}
     
     # Custom Application Settings
     POSTGRES_HOST: postgres
@@ -62,16 +46,27 @@ x-airflow-common:
     # Storage Settings
     DEBUG: ${DEBUG:-true}
     LOCAL_DATA_PATH: ${LOCAL_DATA_PATH:-/opt/airflow/data}
-
+    
     # Azure Key Vault Settings
     AZURE_VAULT_URL: https://bci-keyss.vault.azure.net/
+    AZURE_CLIENT_ID: ${AZURE_CLIENT_ID}
+    AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET}
+    AZURE_TENANT_ID: ${AZURE_TENANT_ID}
+
+    # TrackTik Account Information
+    TRACKTIK_CLIENT_ID: ${TRACKTIK_CLIENT_ID}
+    TRACKTIK_CLIENT_SECRET: ${TRACKTIK_CLIENT_SECRET}
+    TRACKTIK_USERNAME: ${TRACKTIK_USERNAME}
+    TRACKTIK_PASSWORD: ${TRACKTIK_PASSWORD}
 
     # Tracktik Settings
-    TRACKTIK_BASE_URL: https://blackstoneconsulting.staffr.us
+    TRACKTIK_BASE_URL: ${TRACKTIK_BASE_URL}
 
   volumes:
+    - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
     - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
     - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
+    - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
     - ${AIRFLOW_PROJ_DIR:-.}/data:/opt/airflow/data
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
@@ -306,6 +301,28 @@ services:
       - airflow
     depends_on:
       <<: *airflow-common-depends-on
+
+  # You can enable flower by adding "--profile flower" option e.g. docker-compose --profile flower up
+  # or by explicitly targeted on the command line e.g. docker-compose up flower.
+  # See: https://docs.docker.com/compose/profiles/
+  flower:
+    <<: *airflow-common
+    command: celery flower
+    profiles:
+      - flower
+    ports:
+      - "5555:5555"
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "http://localhost:5555/" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
 
   azurite:
     image: mcr.microsoft.com/azure-storage/azurite

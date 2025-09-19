@@ -1,0 +1,138 @@
+# =============================================================================
+# SECURE MULTI-STAGE DOCKERFILE FOR PRODUCTION
+# Stage 1: Build stage - fetches repos with secrets, then discards secrets
+# Stage 2: Production stage - copies repos without any secrets
+# =============================================================================
+
+# =============================================================================
+# BUILD STAGE - Repository Cloning with Secrets
+# =============================================================================
+FROM apache/airflow:3.0.3 as builder
+
+USER root
+
+# Install system dependencies for git operations
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        git \
+        openssh-client \
+        curl \
+        python3 && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Add GitHub to known hosts to avoid SSH prompt
+RUN mkdir -p /root/.ssh && \
+    ssh-keyscan -t rsa github.com >> /root/.ssh/known_hosts
+
+# Create directories for repositories
+RUN mkdir -p /tmp/repos /opt/airflow/dags /opt/airflow/plugins
+
+# Install Azure CLI for Key Vault access
+RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash
+
+# Use BuildKit secrets for Azure credentials (secure approach)
+# These secrets are NOT stored in the final image layers
+RUN --mount=type=secret,id=azure_client_id \
+    --mount=type=secret,id=azure_client_secret \
+    --mount=type=secret,id=azure_tenant_id \
+    AZURE_CLIENT_ID=$(cat /run/secrets/azure_client_id) && \
+    AZURE_CLIENT_SECRET=$(cat /run/secrets/azure_client_secret) && \
+    AZURE_TENANT_ID=$(cat /run/secrets/azure_tenant_id) && \
+    echo "=== Fetching SSH keys from Azure Key Vault ===" && \
+    az login --service-principal -u "$AZURE_CLIENT_ID" -p "$AZURE_CLIENT_SECRET" --tenant "$AZURE_TENANT_ID" && \
+    echo "Downloading SSH keys..." && \
+    az keyvault secret download --vault-name bci-keyss --name bci-git-key --file /tmp/ssh-key-plugins.raw && \
+    az keyvault secret download --vault-name bci-keyss --name bci-git-keys-dags --file /tmp/ssh-key-dags.raw && \
+    echo "Processing SSH key formatting..." && \
+    python3 -c "
+import re
+for fname in ['/tmp/ssh-key-plugins', '/tmp/ssh-key-dags']:
+    with open(fname + '.raw', 'r') as f:
+        content = f.read()
+    content = content.replace('\\\\n', '\n')
+    content = re.sub(r'\r\n?', '\n', content)
+    if not content.endswith('\n'):
+        content += '\n'
+    with open(fname, 'w') as f:
+        f.write(content)
+" && \
+    chmod 600 /tmp/ssh-key-plugins /tmp/ssh-key-dags && \
+    echo "SSH keys processed successfully" && \
+    echo "=== Cloning repositories ===" && \
+    eval "$(ssh-agent -s)" && \
+    ssh-add /tmp/ssh-key-plugins && \
+    git clone git@github.com:BlackstoneDataEng/bci-datamart.git /tmp/repos/plugins/bci_source && \
+    eval "$(ssh-agent -s)" && \
+    ssh-add /tmp/ssh-key-dags && \
+    git clone git@github.com:BlackstoneDataEng/bci-dags.git /tmp/repos/dags && \
+    echo "=== Repository cloning completed ===" && \
+    ls -la /tmp/repos/dags && \
+    ls -la /tmp/repos/plugins/bci_source && \
+    echo "=== Copying repositories to final locations ===" && \
+    cp -r /tmp/repos/dags/* /opt/airflow/dags/ && \
+    cp -r /tmp/repos/plugins/bci_source /opt/airflow/plugins/bci_source && \
+    chown -R airflow:root /opt/airflow/dags /opt/airflow/plugins && \
+    echo "=== Cleaning up secrets and temporary files ===" && \
+    rm -rf /tmp/ssh-key-* /tmp/repos /root/.azure
+
+# =============================================================================
+# PRODUCTION STAGE - Final image without secrets
+# =============================================================================
+FROM apache/airflow:3.0.3
+
+USER root
+
+# Install system dependencies including Java, Git, and SSH client
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        default-jdk \
+        ant \
+        git \
+        openssh-client \
+        curl \
+        wget && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Set JAVA_HOME environment variable and fix PATH
+ENV JAVA_HOME=/usr/lib/jvm/default-java/
+ENV PATH=/home/airflow/.local/bin:$PATH:$JAVA_HOME/bin
+
+# Create directories for Spark artifacts
+RUN mkdir -p /opt/airflow/artifacts && \
+    chmod 755 /opt/airflow/artifacts && \
+    chown airflow:root /opt/airflow/artifacts
+
+# Copy repositories from builder stage (NO SECRETS INCLUDED)
+COPY --from=builder --chown=airflow:root /opt/airflow/dags /opt/airflow/dags
+COPY --from=builder --chown=airflow:root /opt/airflow/plugins /opt/airflow/plugins
+
+# Verify Java installation
+RUN java -version && echo "JAVA_HOME is set to: $JAVA_HOME"
+
+# Show what was copied from builder
+RUN echo "=== FINAL IMAGE REPOSITORY CHECK ===" && \
+    echo "Contents of /opt/airflow/dags:" && \
+    ls -la /opt/airflow/dags/ && \
+    echo "Contents of /opt/airflow/plugins:" && \
+    ls -la /opt/airflow/plugins/
+
+# Switch back to airflow user
+USER airflow
+
+# Set working directory
+WORKDIR /opt/airflow
+
+# Copy requirements file if it exists
+COPY requirements.txt* ./
+
+# Install Python dependencies
+RUN if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+# Copy any local files (optional)
+COPY --chown=airflow:root . .
+
+USER airflow
+
+CMD ["webserver"]
