@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow-apiserver
+  namespace: airflows
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: airflow-apiserver
+  template:
+    metadata:
+      labels:
+        app: airflow-apiserver
+      annotations:
+        azure.workload.identity/inject-proxy-sidecar: "true"
+        azure.workload.identity/client-id: "3a7bbade-a271-459a-aa8b-42ccf53a6aac"  # Your Managed Identity client ID
+    spec:
+      serviceAccountName: airflow-apiserver-sa
+      containers:
+      - name: airflow-apiserver
+        image: registryacr.azurecr.io/airflow-apiserver:0.0.4
+        command: ["bash", "/opt/airflow/add_connections.sh"]
+        ports:
+        - containerPort: 8080
+        env:
+        - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
+          valueFrom:
+            secretKeyRef:
+              name: airflow-db-secret
+              key: connection
+        # Optional: If you want to explicitly pass tenant ID as env variable
+        - name: AZURE_TENANT_ID
+          value: "3a7bbade-a271-459a-aa8b-42ccf53a6aac"
+        volumeMounts:
+        - name: startup-script
+          mountPath: /opt/airflow/add_connections.sh
+          subPath: add_connections.sh
+          readOnly: true
+      volumes:
+      - name: startup-script
+        configMap:
+          name: airflow-startup-script
