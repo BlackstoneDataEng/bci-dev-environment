@@ -1,3 +1,4 @@
+# Arquivo do Deployment airflow-apiserver atualizado
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -14,30 +15,67 @@ spec:
         app: airflow-apiserver
       annotations:
         azure.workload.identity/inject-proxy-sidecar: "true"
-        azure.workload.identity/client-id: "3a7bbade-a271-459a-aa8b-42ccf53a6aac"  # Your Managed Identity client ID
+        azure.workload.identity/client-id: "3a7bbade-a271-459a-aa8b-42ccf53a6aac"
     spec:
       serviceAccountName: airflow-apiserver-sa
       containers:
-      - name: airflow-apiserver
-        image: registryacr.azurecr.io/airflow-apiserver:0.0.4
-        command: ["bash", "/opt/airflow/add_connections.sh"]
-        ports:
-        - containerPort: 8080
-        env:
-        - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
-          valueFrom:
-            secretKeyRef:
-              name: airflow-db-secret
-              key: connection
-        # Optional: If you want to explicitly pass tenant ID as env variable
-        - name: AZURE_TENANT_ID
-          value: "3a7bbade-a271-459a-aa8b-42ccf53a6aac"
-        volumeMounts:
-        - name: startup-script
-          mountPath: /opt/airflow/add_connections.sh
-          subPath: add_connections.sh
-          readOnly: true
+        - name: airflow-apiserver
+          image: registryacr.azurecr.io/airflow-apiserver:0.0.10
+          command: ["bash", "-c"]
+          args:
+            - |
+              # Instalar PySpark se não estiver presente
+              pip install pyspark==3.4.0 --quiet
+
+              # Executar script de inicialização
+              bash /opt/airflow/add_connections.sh
+              
+              # Iniciar o webserver (essencial para a UI)  <-- ADIÇÃO IMPORTANTE
+              airflow webserver
+          ports:
+            - containerPort: 8080
+          env:
+            - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
+              valueFrom:
+                secretKeyRef:
+                  name: airflow-db-secret
+                  key: connection
+            - name: AZURE_TENANT_ID
+              value: "63bcd176-823a-4129-bd6b-cd6142a0b825"
+            - name: AZURE_CLIENT_ID
+              value: "3a7bbade-a271-459a-aa8b-42ccf53a6aac"
+            - name: AZURE_AUTHORITY_HOST
+              value: "https://login.microsoftonline.com/"
+            - name: AZURE_VAULT_URL
+              value: "https://bci-keyss.vault.azure.net/"
+            - name: PYTHONPATH
+              value: "/opt/airflow/plugins:/opt/airflow/plugins/bci_source:/opt/airflow"
+            - name: AIRFLOW__CORE__FERNET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: airflow-secrets
+                  key: fernet-key
+                  optional: true
+            - name: AIRFLOW__WEBSERVER__BASE_URL
+              value: "http://airflow-apiserver-service.airflows.svc.cluster.local:8080"
+          volumeMounts:
+            - name: startup-script
+              mountPath: /opt/airflow/add_connections.sh
+              subPath: add_connections.sh
+              readOnly: true
+            - name: airflow-config
+              mountPath: /opt/airflow/airflow.cfg
+              subPath: airflow.cfg
+              readOnly: true
+            - name: airflow-logs
+              mountPath: /opt/airflow/logs
       volumes:
-      - name: startup-script
-        configMap:
-          name: airflow-startup-script
+        - name: startup-script
+          configMap:
+            name: airflow-startup-script
+        - name: airflow-config
+          configMap:
+            name: airflow-config
+        - name: airflow-logs                
+          persistentVolumeClaim:
+            claimName: airflow-logs-pvc
