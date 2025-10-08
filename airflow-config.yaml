@@ -1,0 +1,76 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: airflow-config
+  namespace: airflows
+data:
+  airflow.cfg: |
+    [core]
+    dags_folder = /opt/airflow/dags
+    plugins_folder = /opt/airflow/plugins
+    base_log_folder = /opt/airflow/logs
+    remote_logging = False
+    executor = CeleryExecutor
+    load_examples = False
+    airflow_api_base_url = http://airflow-apiserver-service.airflows.svc.cluster.local:8080
+    execution_api_server_url = http://airflow-apiserver-service.airflows.svc.cluster.local:8080/execution/
+    hostname_callable = airflow.utils.net.get_host_ip_address
+
+    [database]
+    sql_alchemy_conn_cmd = 
+    sql_alchemy_pool_enabled = True
+    sql_alchemy_pool_size = 5
+    sql_alchemy_max_overflow = 10
+
+    [logging]
+    logging_level = INFO
+    fab_logging_level = WARN
+    log_filename_template = dag_id={{ ti.dag_id }}/run_id={{ ti.run_id }}/task_id={{ ti.task_id }}/%% if ti.map_index >= 0 %%map_index={{ ti.map_index }}/%% endif %%attempt={{ try_number|default(ti.try_number) }}.log
+    log_processor_filename_template = {{ filename }}.log
+    task_log_reader = task
+    remote_logging = False
+    worker_log_server_host = airflow-worker.airflows.svc.cluster.local
+    worker_log_server_port = 8793
+    log_fetch_delay_sec = 5
+    log_fetch_timeout_sec = 60
+
+    [secrets]
+    backend = airflow.providers.microsoft.azure.secrets.key_vault.AzureKeyVaultBackend
+    backend_kwargs = {"connections_prefix": "airflow-connections", "variables_prefix": "airflow-variables", "vault_url": "https://bci-keyss.vault.azure.net/"}
+
+    [webserver]
+    base_url = http://airflow-apiserver-service.airflows.svc.cluster.local:8080
+    web_server_host = 0.0.0.0
+    web_server_port = 8080
+    default_ui_user_enabled = True
+    default_ui_user_username = admin
+    default_ui_user_password = admin
+    default_ui_user_email = admin@example.com
+    default_ui_user_first_name = Admin
+    default_ui_user_last_name = User
+    secret_key = 3e99c4f2c68f42b2b0c85480fb2fbb94
+
+    [api]
+    auth_backends = airflow.api.auth.backend.default
+    host = 0.0.0.0
+    port = 8080
+    airflow_api_base_url = http://airflow-apiserver-service.airflows.svc.cluster.local:8080
+
+    [airflow.sdk.api.client]
+    endpoint_url = http://airflow-apiserver-service.airflows.svc.cluster.local:8080
+    auth_backend = airflow.api.auth.backend.basic_auth
+    username = admin
+    password = admin
+
+    [api_auth]
+    manager = airflow.api.auth.manager.public.PublicAuthManager
+    jwt_secret = 5fprZQxNPtK9Ij6qXl0Pz6HN8CFsisiBKthNjW4wxE0
+
+    [scheduler]
+    child_process_timeout = 600
+
+    [dag_processor]
+    refresh_interval = 300
+
+    [celery]
+    worker_concurrency = 16

@@ -1,39 +1,33 @@
-# Updated airflow-apiserver deployment manifest
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: airflow-apiserver
+  name: airflow-triggerer
   namespace: airflows
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: airflow-apiserver
+      app: airflow-triggerer
   template:
     metadata:
       labels:
-        app: airflow-apiserver
+        app: airflow-triggerer
       annotations:
         azure.workload.identity/inject-proxy-sidecar: "true"
         azure.workload.identity/client-id: "3a7bbade-a271-459a-aa8b-42ccf53a6aac"
     spec:
-      serviceAccountName: airflow-apiserver-sa
+      serviceAccountName: airflow-triggerer-sa
       containers:
-        - name: airflow-apiserver
-          image: registryacr.azurecr.io/airflow-apiserver:0.0.17
+        - name: airflow-triggerer
+          image: registryacr.azurecr.io/airflow-triggerer:0.0.17
           command: ["bash", "-c"]
           args:
             - |
               # Install PySpark if it is not already present
               pip install pyspark==3.4.0 --quiet
 
-              # Run initialization script
-              bash /opt/airflow/add_connections.sh
-              
-              # Start the webserver (essential for the UI)  <-- IMPORTANT ADDITION
-              airflow webserver
-          ports:
-            - containerPort: 8080
+              # Start the triggerer
+              airflow triggerer
           env:
             - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
               valueFrom:
@@ -49,33 +43,27 @@ spec:
             - name: AZURE_VAULT_URL
               value: "https://bci-keyss.vault.azure.net/"
             - name: PYTHONPATH
-              value: "/opt/airflow/plugins:/opt/airflow/plugins/bci_source:/opt/airflow"
+              value: "/opt/airflow/plugins:/opt/airflow"
             - name: AIRFLOW__CORE__FERNET_KEY
               valueFrom:
                 secretKeyRef:
                   name: airflow-secrets
                   key: fernet-key
                   optional: true
-            - name: AIRFLOW__WEBSERVER__BASE_URL
-              value: "http://airflow-apiserver-service.airflows.svc.cluster.local:8080"
           volumeMounts:
-            - name: startup-script
-              mountPath: /opt/airflow/add_connections.sh
-              subPath: add_connections.sh
-              readOnly: true
             - name: airflow-config
               mountPath: /opt/airflow/airflow.cfg
               subPath: airflow.cfg
               readOnly: true
-            - name: airflow-logs
-              mountPath: /opt/airflow/logs
       volumes:
-        - name: startup-script
-          configMap:
-            name: airflow-startup-script
         - name: airflow-config
           configMap:
             name: airflow-config
-        - name: airflow-logs                
-          persistentVolumeClaim:
-            claimName: airflow-logs-pvc
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: airflow-triggerer-sa
+  namespace: airflows
+  annotations:
+    azure.workload.identity/client-id: "3a7bbade-a271-459a-aa8b-42ccf53a6aac"

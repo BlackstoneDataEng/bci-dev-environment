@@ -1,0 +1,14 @@
+# azure-files-sc.yaml
+kind: StorageClass
+apiVersion: storage.k8s.io/v1
+metadata:
+  name: azurefile-rwx # Name of the storage class
+provisioner: file.csi.azure.com # Azure Files CSI provisioner
+parameters:
+  skuName: Standard_LRS # Accepts Standard_LRS, Standard_GRS, Premium_LRS, etc.
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
+allowVolumeExpansion: true
+mountOptions:
+  - mfsymlinks
+  - actimeo=30
