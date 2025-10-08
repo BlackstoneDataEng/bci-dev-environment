@@ -29,8 +29,9 @@ VERSION="$1"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+PROJECT_ROOT="$(cd "$REPO_ROOT/.." && pwd)"
 DOCKERFILE_PATH="$REPO_ROOT/Dockerfile"
-BUILD_CONTEXT="$REPO_ROOT"
+BUILD_CONTEXT="$PROJECT_ROOT"
 
 REGISTRY="${REGISTRY:-registryacr.azurecr.io}"
 TARGET_PLATFORM="${TARGET_PLATFORM:-linux/amd64}"
@@ -85,12 +86,13 @@ ensure_buildx() {
     docker buildx install
   fi
 
-  if ! docker buildx ls | grep -q "^$BUILDER_NAME"; then
-    info "Creating buildx builder '$BUILDER_NAME'..."
-    docker buildx create --name "$BUILDER_NAME" --use --bootstrap
-  else
+  if docker buildx inspect "$BUILDER_NAME" >/dev/null 2>&1; then
     info "Using existing buildx builder '$BUILDER_NAME'."
     docker buildx use "$BUILDER_NAME"
+    docker buildx inspect "$BUILDER_NAME" --bootstrap >/dev/null 2>&1 || true
+  else
+    info "Creating buildx builder '$BUILDER_NAME'..."
+    docker buildx create --name "$BUILDER_NAME" --use --bootstrap
   fi
 }
 
@@ -220,4 +222,3 @@ show_summary
 
 info "Release workflow completed successfully."
 echo "Access the Airflow UI via port-forward or exposed service as documented."
-
