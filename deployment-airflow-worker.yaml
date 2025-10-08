@@ -28,7 +28,7 @@ spec:
               pip install --quiet -r /opt/airflow/requirements/requirements.txt
 
               # Start log server and worker with stable hostname
-              airflow serve-logs --address 0.0.0.0 --port 8793 &
+              airflow celery serve-logs --address 0.0.0.0 --port 8793 &
               SERVE_LOGS_PID=$!
               trap "kill $SERVE_LOGS_PID" EXIT
 
