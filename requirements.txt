@@ -1,0 +1,26 @@
+# Core Spark dependencies
+pyspark==3.4.0
+py4j==0.10.9.7
+
+# Azure dependencies
+azure-storage-blob==12.19.0
+azure-identity==1.15.0
+azure-keyvault-secrets==4.8.0
+
+# Database dependencies
+psycopg2-binary==2.9.9
+sqlalchemy==1.4.49
+
+# Data processing
+pandas==2.1.4
+pyarrow==14.0.2
+
+# HTTP and API dependencies
+requests==2.31.0
+urllib3==2.1.0
+
+# Utility dependencies
+python-dotenv==1.0.0
+pyyaml==6.0.1
+
+apache-airflow-providers-microsoft-azure

@@ -1,0 +1,13 @@
+# airflow-pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: airflow-logs-pvc
+  namespace: airflows
+spec:
+  accessModes:
+    - ReadWriteMany  # Access mode for multiple nodes
+  storageClassName: azurefile-rwx # Points to the storage class that we created
+  resources:
+    requests:
+      storage: 10Gi
