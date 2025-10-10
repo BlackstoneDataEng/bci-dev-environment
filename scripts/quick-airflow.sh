@@ -20,9 +20,46 @@ echo "🚀 Connecting to Airflow..."
 echo "Pod: $APISERVER_POD"
 echo "URL: http://localhost:$LOCAL_PORT"
 echo "User: admin"
-echo ""
-echo "To retrieve the password:"
-echo "kubectl exec -ti $APISERVER_POD -n $NAMESPACE -- cat /opt/airflow/simple_auth_manager_passwords.json.generated"
+
+PASSWORD_JSON=$(kubectl exec -n "$NAMESPACE" "$APISERVER_POD" -- cat /opt/airflow/simple_auth_manager_passwords.json.generated 2>/dev/null)
+
+if [ -z "$PASSWORD_JSON" ]; then
+    echo "⚠️ Unable to retrieve password automatically."
+    echo "   Try: kubectl exec -ti $APISERVER_POD -n $NAMESPACE -- cat /opt/airflow/simple_auth_manager_passwords.json.generated"
+else
+    PYTHON_CMD=$(command -v python3 || command -v python)
+    if [ -z "$PYTHON_CMD" ]; then
+        echo "⚠️ Python not available locally to parse password."
+        echo "   Raw JSON:"
+        echo "$PASSWORD_JSON"
+    else
+        PASSWORD=$(printf '%s' "$PASSWORD_JSON" | "$PYTHON_CMD" -c 'import json, sys
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    sys.exit(1)
+
+password = None
+if isinstance(data, dict):
+    password = data.get("admin")
+    if password is None and len(data) == 1:
+        password = next(iter(data.values()))
+
+if not password:
+    sys.exit(2)
+
+sys.stdout.write(password)')
+        PARSE_STATUS=$?
+        if [ "$PARSE_STATUS" -eq 0 ] && [ -n "$PASSWORD" ]; then
+            echo "Password: $PASSWORD"
+        else
+            echo "⚠️ Unable to parse password from JSON."
+            echo "   Raw JSON:"
+            echo "$PASSWORD_JSON"
+        fi
+    fi
+fi
+
 echo ""
 echo "Press Ctrl+C to stop"
 
