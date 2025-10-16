@@ -32,10 +32,12 @@ USER root
 RUN JARS_DIR="/home/airflow/.local/lib/python3.11/site-packages/pyspark/jars" \
     && mkdir -p "$JARS_DIR" \
     && curl -fsSL https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-azure/3.3.6/hadoop-azure-3.3.6.jar -o "$JARS_DIR/hadoop-azure-3.3.6.jar" \
+    && curl -fsSL https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-common/3.3.6/hadoop-common-3.3.6.jar -o "$JARS_DIR/hadoop-common-3.3.6.jar" \
     && curl -fsSL https://repo1.maven.org/maven2/com/microsoft/azure/azure-storage/8.6.6/azure-storage-8.6.6.jar -o "$JARS_DIR/azure-storage-8.6.6.jar" \
     && curl -fsSL https://repo1.maven.org/maven2/com/azure/azure-storage-blob/12.26.0/azure-storage-blob-12.26.0.jar -o "$JARS_DIR/azure-storage-blob-12.26.0.jar" \
     && chown airflow:root \
         "$JARS_DIR/hadoop-azure-3.3.6.jar" \
+        "$JARS_DIR/hadoop-common-3.3.6.jar" \
         "$JARS_DIR/azure-storage-8.6.6.jar" \
         "$JARS_DIR/azure-storage-blob-12.26.0.jar"
 
